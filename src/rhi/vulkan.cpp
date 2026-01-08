@@ -1,35 +1,178 @@
 #include <marlon/rhi/vulkan.h>
 
-#include <cstdlib>
+#include <cassert>
+#include <cstring>
+
+#include <algorithm>
+#include <bit>
+#include <mutex>
+#include <vector>
 
 #include <volk.h>
 
+#include <marlon/malloc.h>
+
+#include "descriptor_set_layout.h"
 #include "interface.h"
+#include "surface.h"
 
 namespace marlon::rhi::vulkan
 {
   struct Interface
   {
     rhi::Interface base;
-    VkInstance instance;
-    VkPhysicalDevice physical_device;
-    std::uint32_t queue_family_index;
-    VkDevice device;
-    VkQueue queue;
+    VkInstance vk_instance;
+    VkPhysicalDevice vk_physical_device;
+    std::uint32_t vk_queue_family_index;
+    VkDevice vk_device;
+    VkQueue vk_queue;
+  };
+
+  struct Surface
+  {
+    rhi::Surface base;
+    VkSurfaceKHR vk_handle;
   };
 
   namespace
   {
-    auto delete_interface(rhi::Object *self) -> void
-    {
-      std::free(self);
-    }
-
     struct Descriptor_set_layout
     {
       rhi::Descriptor_set_layout base;
       VkDescriptorSetLayout vk_handle;
     };
+
+    template <typename T>
+    struct Vk_parent;
+
+    template <>
+    struct Vk_parent<VkInstance>
+    {
+      using type = std::nullptr_t;
+    };
+
+    template <>
+    struct Vk_parent<VkDescriptorSetLayout>
+    {
+      using type = VkDevice;
+    };
+
+    template <typename T>
+    using Vk_parent_t = Vk_parent<T>::type;
+
+    template <typename T>
+    struct Vk_deleter;
+
+    template <>
+    struct Vk_deleter<VkInstance>
+    {
+      auto operator()(std::nullptr_t, VkInstance instance) const noexcept
+        -> void
+      {
+        vkDestroyInstance(instance, nullptr);
+      }
+    };
+
+    template <>
+    struct Vk_deleter<VkDescriptorSetLayout>
+    {
+      auto operator()(
+        VkDevice device,
+        VkDescriptorSetLayout descriptor_set_layout
+      ) const noexcept
+      {
+        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
+      }
+    };
+
+    template <typename T>
+    struct Vk_guard
+    {
+      constexpr explicit Vk_guard(Vk_parent_t<T> parent, T value) noexcept
+          : _parent{parent}, _value{value}
+      {
+      }
+
+      ~Vk_guard()
+      {
+        if (_value)
+        {
+          Vk_deleter<T>{}(_parent, _value);
+        }
+      }
+
+      constexpr auto release() noexcept -> T
+      {
+        auto temp = _value;
+        _value = nullptr;
+        return temp;
+      }
+
+    private:
+      Vk_parent_t<T> _parent;
+      T _value;
+    };
+
+    auto ensure_volk_initialized() -> void
+    {
+      static auto initialized = false;
+      static auto mutex = std::mutex{};
+      auto const lock = std::scoped_lock{mutex};
+      if (!initialized)
+      {
+        if (auto const result = volkInitialize(); result != VK_SUCCESS)
+        {
+          throw Error{result};
+        }
+        initialized = true;
+      }
+    }
+
+    auto create_vk_instance(
+      std::span<char const * const> layers,
+      std::span<char const * const> extensions
+    ) -> Vk_guard<VkInstance>
+    {
+      auto const vk_instance_create_info = VkInstanceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = {},
+        .pApplicationInfo = {},
+        .enabledLayerCount = static_cast<std::uint32_t>(layers.size()),
+        .ppEnabledLayerNames = layers.data(),
+        .enabledExtensionCount = static_cast<std::uint32_t>(extensions.size()),
+        .ppEnabledExtensionNames = extensions.data(),
+      };
+      auto vk_instance = VkInstance{};
+      if (auto const vk_result =
+            vkCreateInstance(&vk_instance_create_info, nullptr, &vk_instance);
+          vk_result != VK_SUCCESS)
+      {
+        throw Error{vk_result};
+      }
+      return Vk_guard{nullptr, vk_instance};
+    }
+
+    auto delete_interface(rhi::Object *self) noexcept -> void
+    {
+      auto const _self = reinterpret_cast<Interface *>(self);
+      assert(_self->vk_device);
+      vkDestroyDevice(_self->vk_device, nullptr);
+      assert(_self->vk_instance);
+      vkDestroyInstance(_self->vk_instance, nullptr);
+      marlon::free(self);
+    }
+
+    auto delete_descriptor_set_layout(rhi::Object *self) noexcept -> void
+    {
+      auto const _self = reinterpret_cast<Descriptor_set_layout *>(self);
+      auto const owner = reinterpret_cast<Interface *>(self->parent);
+      assert(owner->vk_device);
+      assert(_self->vk_handle);
+      vkDestroyDescriptorSetLayout(owner->vk_device, _self->vk_handle, nullptr);
+      rhi::release_object(&owner->base.base);
+      marlon::free(self);
+    }
 
     auto new_descriptor_set_layout(
       rhi::Interface *interface,
@@ -45,11 +188,11 @@ namespace marlon::rhi::vulkan
         {
           result.push_back({
             .binding = binding.index,
-            .descriptor_type =
+            .descriptorType =
               static_cast<VkDescriptorType>(binding.descriptor_type),
-            .descriptor_count = binding.descriptor_count,
-            .stage_flags =
-              static_cast<VkStageFlags>(create_info.stage_bits.value()),
+            .descriptorCount = binding.descriptor_count,
+            .stageFlags =
+              static_cast<VkShaderStageFlags>(binding.stage_bits.value()),
             .pImmutableSamplers = nullptr,
           });
         }
@@ -62,33 +205,35 @@ namespace marlon::rhi::vulkan
         .bindingCount = static_cast<std::uint32_t>(vk_bindings.size()),
         .pBindings = vk_bindings.data(),
       };
-      auto const vk_handle = [&]()
+      auto vk_handle = [&]()
       {
         auto result = VkDescriptorSetLayout{};
         auto const vk_result = vkCreateDescriptorSetLayout(
-          _interface->device,
+          _interface->vk_device,
           &vk_create_info,
+          nullptr,
           &result
         );
         if (vk_result != VK_SUCCESS)
         {
           throw Error{vk_result};
         }
-        return result;
+        return Vk_guard{_interface->vk_device, result};
       }();
-      return new (std::malloc(sizeof(Descriptor_set_layout)))
+      auto const result = new (marlon::malloc(sizeof(Descriptor_set_layout)))
         Descriptor_set_layout{
           .base =
             rhi::Descriptor_set_layout{
               .base =
                 rhi::Object{
-                  .parent = _interface->base,
+                  .parent = rhi::acquire_object(&_interface->base.base),
                   .deleter = delete_descriptor_set_layout,
                   .reference_count = 1,
                 },
             },
-          .vk_handle = vk_handle,
+          .vk_handle = vk_handle.release(),
         };
+      return &result->base;
     }
 
     auto new_descriptor_set(
@@ -148,11 +293,60 @@ namespace marlon::rhi::vulkan
     {
       return nullptr;
     }
+
+    auto delete_surface(rhi::Object *self) noexcept -> void
+    {
+      auto const _self = reinterpret_cast<Surface *>(self);
+      auto const owner = reinterpret_cast<Interface *>(self->parent);
+      vkDestroySurfaceKHR(owner->vk_instance, _self->vk_handle, nullptr);
+      rhi::release_object(&owner->base.base);
+      marlon::free(self);
+    }
   } // namespace
 
-  auto new_interface(Interface_create_info const &) -> Interface *
+  auto new_interface(Interface_create_info const &create_info) -> Interface *
   {
-    return new (std::malloc(sizeof(Interface))) Interface{
+    ensure_volk_initialized();
+    auto const vk_validation_layer = "VK_LAYER_KHRONOS_validation";
+    auto const vk_instance_layers =
+      create_info.bits & Interface_create_bit::debug
+        ? std::span{&vk_validation_layer, 1}
+        : std::span<char const * const>{};
+    auto const vk_instance_extensions = [&]()
+    {
+      auto result = std::vector<char const *>{};
+      if (create_info.bits & Interface_create_bit::debug)
+      {
+        result.emplace_back("VK_EXT_debug_utils");
+      }
+      if (create_info.bits & Interface_create_bit::wsi)
+      {
+        result.emplace_back("VK_KHR_surface");
+      }
+      for (auto const &wsi_extension : create_info.wsi_extensions)
+      {
+        auto const is_cstring_in_range =
+          [](char const *cstring_to_find, auto const &range)
+        {
+          auto const it = std::ranges::find_if(
+            range,
+            [&](char const *cstring_in_range)
+            {
+              return std::strcmp(cstring_in_range, cstring_to_find) == 0;
+            }
+          );
+          return it != range.end();
+        };
+        if (!is_cstring_in_range(wsi_extension, result))
+        {
+          result.emplace_back(wsi_extension);
+        }
+      }
+      return result;
+    }();
+    auto vk_instance =
+      create_vk_instance(vk_instance_layers, vk_instance_extensions);
+    return new (marlon::malloc(sizeof(Interface))) Interface{
       .base =
         rhi::Interface{
           .base =
@@ -171,11 +365,26 @@ namespace marlon::rhi::vulkan
           .new_swapchain = new_swapchain,
           .new_command_buffer = new_command_buffer,
         },
-      .instance = {},
-      .physical_device = {},
-      .queue_family_index = {},
-      .device = {},
-      .queue = {},
+      .vk_instance = vk_instance.release(),
+      .vk_physical_device = {},
+      .vk_queue_family_index = {},
+      .vk_device = {},
+      .vk_queue = {},
+    };
+  }
+
+  auto new_surface(Interface *interface, Surface_create_info const &create_info)
+    -> Surface *
+  {
+    return new (marlon::malloc(sizeof(Surface))) Surface{
+      .base = rhi::Surface{
+        .base = rhi::Object{
+          .parent = acquire_object(&interface->base.base),
+          .deleter = delete_surface,
+          .reference_count = 1,
+        },
+      },
+      .vk_handle = std::bit_cast<VkSurfaceKHR>(create_info.vk_handle),
     };
   }
 } // namespace marlon::rhi::vulkan

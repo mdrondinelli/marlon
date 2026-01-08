@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <span>
-#include <utility>
 
 #include <marlon/enum_bitset.h>
 
@@ -49,7 +48,7 @@ namespace marlon::rhi
     return Shader_stage_bitset{lhs} ^ rhs;
   }
 
-  enum class Pipeline_stage_bit
+  enum class Pipeline_stage_bit : std::uint64_t
   {
     // NONE
     none = 0ull,
@@ -97,7 +96,7 @@ namespace marlon::rhi
     return Pipeline_stage_bitset{lhs} ^ rhs;
   }
 
-  enum class Barrier_access_bit
+  enum class Barrier_access_bit : std::uint64_t
   {
     // NONE
     none = 0ull,
@@ -173,7 +172,7 @@ namespace marlon::rhi
 
   struct Descriptor_set_layout_create_info
   {
-    std::span<Descriptor_set_binding const> bindings;
+    std::span<Descriptor_set_layout_binding const> bindings;
   };
 
   struct Descriptor_set_create_info
@@ -219,9 +218,36 @@ namespace marlon::rhi
     Barrier_access_bitset access_bits;
   };
 
-  auto acquire_object(Object *p) noexcept -> void;
+  auto acquire_object(Object *p) noexcept -> Object *;
 
   auto release_object(Object *p) noexcept -> void;
+
+  constexpr auto get_object(Object *p) noexcept -> Object *
+  {
+    return p;
+  }
+
+  auto get_object(Interface *p) noexcept -> Object *;
+
+  auto get_object(Descriptor_set_layout *p) noexcept -> Object *;
+
+  auto get_object(Descriptor_set *p) noexcept -> Object *;
+
+  auto get_object(Pipeline_layout *p) noexcept -> Object *;
+
+  auto get_object(Compute_pipeline *p) noexcept -> Object *;
+
+  auto get_object(Graphics_pipeline *p) noexcept -> Object *;
+
+  auto get_object(Buffer *p) noexcept -> Object *;
+
+  auto get_object(Image *p) noexcept -> Object *;
+
+  auto get_object(Surface *p) noexcept -> Object *;
+
+  auto get_object(Swapchain *p) noexcept -> Object *;
+
+  auto get_object(Command_buffer *p) noexcept -> Object *;
 
   auto new_descriptor_set_layout(
     Interface *interface,

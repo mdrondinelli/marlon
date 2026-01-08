@@ -8,6 +8,8 @@ add_library(
   rhi
   src/rhi/object.cpp
   src/rhi/interface.cpp
+  src/rhi/descriptor_set_layout.cpp
+  src/rhi/descriptor_set.cpp
   src/rhi/command_buffer.cpp
   src/rhi/ptr.cpp
 )

@@ -2,6 +2,11 @@
 
 namespace marlon::rhi
 {
+  auto get_object(Interface *p) noexcept -> Object *
+  {
+    return &p->base;
+  }
+
   auto new_descriptor_set_layout(
     Interface *interface,
     Descriptor_set_layout_create_info const &create_info

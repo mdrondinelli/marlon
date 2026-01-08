@@ -1,40 +1,12 @@
 #ifndef MARLON_RHI_PTR_H
 #define MARLON_RHI_PTR_H
 
+#include <utility>
+
 #include <marlon/rhi/rhi.h>
 
 namespace marlon::rhi
 {
-  namespace detail
-  {
-    auto get_object(Object *p) noexcept -> Object *
-    {
-      return p;
-    }
-
-    auto get_object(Interface *p) noexcept -> Object *;
-
-    auto get_object(Descriptor_set_layout *p) noexcept -> Object *;
-
-    auto get_object(Descriptor_set *p) noexcept -> Object *;
-
-    auto get_object(Pipeline_layout *p) noexcept -> Object *;
-
-    auto get_object(Compute_pipeline *p) noexcept -> Object *;
-
-    auto get_object(Graphics_pipeline *p) noexcept -> Object *;
-
-    auto get_object(Buffer *p) noexcept -> Object *;
-
-    auto get_object(Image *p) noexcept -> Object *;
-
-    auto get_object(Surface *p) noexcept -> Object *;
-
-    auto get_object(Swapchain *p) noexcept -> Object *;
-
-    auto get_object(Command_buffer *p) noexcept -> Object *;
-  } // namespace detail
-
   template <typename T>
   struct Ptr;
 

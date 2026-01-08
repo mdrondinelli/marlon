@@ -9,7 +9,7 @@ namespace marlon::rhi
   struct Object
   {
     Object *parent;
-    void (*deleter)(Object *);
+    void (*deleter)(Object *) noexcept;
     std::atomic<std::uint64_t> reference_count;
   };
 } // namespace marlon::rhi

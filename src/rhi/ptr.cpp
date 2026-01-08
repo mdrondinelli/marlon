@@ -3,7 +3,6 @@
 #include "buffer.h"
 #include "command_buffer.h"
 #include "compute_pipeline.h"
-#include "descriptor_set.h"
 #include "graphics_pipeline.h"
 #include "image.h"
 #include "pipeline_layout.h"
@@ -12,11 +11,6 @@
 
 namespace marlon::rhi::detail
 {
-  auto get_object(Descriptor_set *p) noexcept -> Object *
-  {
-    return &p->base;
-  }
-
   auto get_object(Pipeline_layout *p) noexcept -> Object *
   {
     return &p->base;

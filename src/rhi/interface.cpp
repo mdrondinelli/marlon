@@ -2,9 +2,15 @@
 
 namespace marlon::rhi
 {
-  auto get_object(Interface *p) noexcept -> Object *
+  auto get_base(Interface *p) noexcept -> Object *
   {
     return &p->base;
+  }
+
+  template <>
+  auto laundering_cast<Interface *>(void *vp) noexcept -> Interface *
+  {
+    return std::launder(static_cast<Interface *>(vp));
   }
 
   auto new_descriptor_set_layout(

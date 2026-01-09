@@ -42,6 +42,11 @@ namespace marlon::rhi::vulkan
       VkDescriptorSetLayout vk_handle;
     };
 
+    auto get_base(Descriptor_set_layout *p) noexcept
+    {
+      return &p->base;
+    }
+
     template <typename T>
     struct Vk_parent;
 
@@ -155,7 +160,7 @@ namespace marlon::rhi::vulkan
 
     auto delete_interface(rhi::Object *self) noexcept -> void
     {
-      auto const _self = reinterpret_cast<Interface *>(self);
+      auto const _self = rhi::downcast<Interface *>(self);
       assert(_self->vk_device);
       vkDestroyDevice(_self->vk_device, nullptr);
       assert(_self->vk_instance);
@@ -165,12 +170,12 @@ namespace marlon::rhi::vulkan
 
     auto delete_descriptor_set_layout(rhi::Object *self) noexcept -> void
     {
-      auto const _self = reinterpret_cast<Descriptor_set_layout *>(self);
-      auto const owner = reinterpret_cast<Interface *>(self->parent);
+      auto const _self = rhi::downcast<Descriptor_set_layout *>(self);
+      auto const owner = rhi::downcast<Interface *>(self->parent);
       assert(owner->vk_device);
       assert(_self->vk_handle);
       vkDestroyDescriptorSetLayout(owner->vk_device, _self->vk_handle, nullptr);
-      rhi::release_object(&owner->base.base);
+      rhi::release_object(rhi::upcast<rhi::Object *>(owner));
       marlon::free(self);
     }
 
@@ -179,7 +184,7 @@ namespace marlon::rhi::vulkan
       rhi::Descriptor_set_layout_create_info const &create_info
     ) -> rhi::Descriptor_set_layout *
     {
-      auto const _interface = reinterpret_cast<Interface *>(interface);
+      auto const _interface = rhi::downcast<Interface *>(interface);
       auto const vk_bindings = [&]()
       {
         auto result = std::vector<VkDescriptorSetLayoutBinding>{};
@@ -226,14 +231,16 @@ namespace marlon::rhi::vulkan
             rhi::Descriptor_set_layout{
               .base =
                 rhi::Object{
-                  .parent = rhi::acquire_object(&_interface->base.base),
+                  .parent = rhi::acquire_object(
+                    rhi::upcast<rhi::Object *>(_interface)
+                  ),
                   .deleter = delete_descriptor_set_layout,
                   .reference_count = 1,
                 },
             },
           .vk_handle = vk_handle.release(),
         };
-      return &result->base;
+      return rhi::upcast<rhi::Descriptor_set_layout *>(result);
     }
 
     auto new_descriptor_set(
@@ -296,10 +303,10 @@ namespace marlon::rhi::vulkan
 
     auto delete_surface(rhi::Object *self) noexcept -> void
     {
-      auto const _self = reinterpret_cast<Surface *>(self);
-      auto const owner = reinterpret_cast<Interface *>(self->parent);
+      auto const _self = rhi::downcast<Surface *>(self);
+      auto const owner = rhi::downcast<Interface *>(self->parent);
       vkDestroySurfaceKHR(owner->vk_instance, _self->vk_handle, nullptr);
-      rhi::release_object(&owner->base.base);
+      rhi::release_object(rhi::upcast<rhi::Object *>(owner));
       marlon::free(self);
     }
   } // namespace
@@ -377,14 +384,41 @@ namespace marlon::rhi::vulkan
     -> Surface *
   {
     return new (marlon::malloc(sizeof(Surface))) Surface{
-      .base = rhi::Surface{
-        .base = rhi::Object{
-          .parent = acquire_object(&interface->base.base),
-          .deleter = delete_surface,
-          .reference_count = 1,
+      .base =
+        rhi::Surface{
+          .base =
+            rhi::Object{
+              .parent =
+                acquire_object(rhi::upcast<rhi::Object *>(interface)),
+              .deleter = delete_surface,
+              .reference_count = 1,
+            },
         },
-      },
       .vk_handle = std::bit_cast<VkSurfaceKHR>(create_info.vk_handle),
     };
   }
 } // namespace marlon::rhi::vulkan
+
+namespace marlon::rhi
+{
+  template <>
+  auto laundering_cast<vulkan::Interface *>(void *vp) noexcept
+    -> vulkan::Interface *
+  {
+    return std::launder(static_cast<vulkan::Interface *>(vp));
+  }
+
+  template <>
+  auto laundering_cast<vulkan::Descriptor_set_layout *>(void *vp) noexcept
+    -> vulkan::Descriptor_set_layout *
+  {
+    return std::launder(static_cast<vulkan::Descriptor_set_layout *>(vp));
+  }
+
+  template <>
+  auto laundering_cast<vulkan::Surface *>(void *vp) noexcept
+    -> vulkan::Surface *
+  {
+    return std::launder(static_cast<vulkan::Surface *>(vp));
+  }
+} // namespace marlon::rhi

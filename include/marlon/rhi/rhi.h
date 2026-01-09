@@ -4,10 +4,98 @@
 #include <cstdint>
 #include <span>
 
+#include <marlon/concepts.h>
 #include <marlon/enum_bitset.h>
 
 namespace marlon::rhi
 {
+  template <typename T>
+  concept HasGetBase = requires(T p) {
+    {
+      get_base(p)
+    } noexcept;
+  };
+
+  template <HasGetBase T>
+  struct Get_base
+  {
+    auto operator()(T p)
+    {
+      return get_base(p);
+    }
+  };
+
+  template <HasGetBase T>
+  struct Base
+  {
+    using type = std::invoke_result_t<Get_base<T>, T>;
+  };
+
+  template <HasGetBase T>
+  using Base_t = Base<T>::type;
+
+  template <marlon::Pointer T>
+  auto laundering_cast(void *vp) noexcept -> T;
+
+  template <typename T>
+  concept HasLaunderingCast = requires(T p, void *vp) {
+    {
+      laundering_cast<T>(vp)
+    } -> std::same_as<T>;
+  };
+
+  template <typename T>
+  concept ObjectHandle = HasGetBase<T> && HasLaunderingCast<T>;
+
+  template <ObjectHandle T, ObjectHandle U>
+  struct Is_base_of: Is_base_of<T, Base_t<U>>
+  {
+  };
+
+  template <ObjectHandle T>
+  struct Is_base_of<T, T>: std::true_type
+  {
+  };
+
+  template <ObjectHandle T>
+  struct Is_base_of<Base_t<T>, T>: std::true_type
+  {
+  };
+
+  template <ObjectHandle T, ObjectHandle U>
+    requires std::same_as<Base_t<U>, std::nullptr_t>
+  struct Is_base_of<T, U>: std::false_type
+  {
+  };
+
+  template <ObjectHandle T, ObjectHandle U>
+  constexpr bool Is_base_of_v = Is_base_of<T, U>::value;
+
+  template <typename T, typename U>
+  concept BaseOf = ObjectHandle<T> && ObjectHandle<U> && Is_base_of_v<T, U>;
+
+  template <ObjectHandle T, ObjectHandle U>
+    requires BaseOf<T, U>
+  auto upcast(U p) noexcept -> T
+  {
+    if constexpr (std::is_same_v<T, U>)
+    {
+      return p;
+    }
+    else
+    {
+
+      return upcast<T>(get_base(p));
+    }
+  }
+
+  template <ObjectHandle T, ObjectHandle U>
+    requires BaseOf<U, T>
+  auto downcast(U p) noexcept -> T
+  {
+    return laundering_cast<T>(p);
+  }
+
   struct Object;
   struct Interface;
   struct Descriptor_set_layout;
@@ -20,6 +108,70 @@ namespace marlon::rhi
   struct Surface;
   struct Swapchain;
   struct Command_buffer;
+
+  constexpr auto get_base(Object *) noexcept -> std::nullptr_t
+  {
+    return nullptr;
+  }
+
+  auto get_base(Interface *p) noexcept -> Object *;
+
+  auto get_base(Descriptor_set_layout *p) noexcept -> Object *;
+
+  auto get_base(Descriptor_set *p) noexcept -> Object *;
+
+  auto get_base(Pipeline_layout *p) noexcept -> Object *;
+
+  auto get_base(Compute_pipeline *p) noexcept -> Object *;
+
+  auto get_base(Graphics_pipeline *p) noexcept -> Object *;
+
+  auto get_base(Buffer *p) noexcept -> Object *;
+
+  auto get_base(Image *p) noexcept -> Object *;
+
+  auto get_base(Surface *p) noexcept -> Object *;
+
+  auto get_base(Swapchain *p) noexcept -> Object *;
+
+  auto get_base(Command_buffer *p) noexcept -> Object *;
+
+  template <>
+  auto laundering_cast<Interface *>(void *vp) noexcept -> Interface *;
+
+  template <>
+  auto laundering_cast<Descriptor_set_layout *>(void *vp) noexcept
+    -> Descriptor_set_layout *;
+
+  template <>
+  auto laundering_cast<Descriptor_set *>(void *vp) noexcept -> Descriptor_set *;
+
+  template <>
+  auto laundering_cast<Pipeline_layout *>(void *vp) noexcept
+    -> Pipeline_layout *;
+
+  template <>
+  auto laundering_cast<Compute_pipeline *>(void *vp) noexcept
+    -> Compute_pipeline *;
+
+  template <>
+  auto laundering_cast<Graphics_pipeline *>(void *vp) noexcept
+    -> Graphics_pipeline *;
+
+  template <>
+  auto laundering_cast<Buffer *>(void *vp) noexcept -> Buffer *;
+
+  template <>
+  auto laundering_cast<Image *>(void *vp) noexcept -> Image *;
+
+  template <>
+  auto laundering_cast<Surface *>(void *vp) noexcept -> Surface *;
+
+  template <>
+  auto laundering_cast<Swapchain *>(void *vp) noexcept -> Swapchain *;
+
+  template <>
+  auto laundering_cast<Command_buffer *>(void *vp) noexcept -> Command_buffer *;
 
   enum class Shader_stage_bit
   {
@@ -221,33 +373,6 @@ namespace marlon::rhi
   auto acquire_object(Object *p) noexcept -> Object *;
 
   auto release_object(Object *p) noexcept -> void;
-
-  constexpr auto get_object(Object *p) noexcept -> Object *
-  {
-    return p;
-  }
-
-  auto get_object(Interface *p) noexcept -> Object *;
-
-  auto get_object(Descriptor_set_layout *p) noexcept -> Object *;
-
-  auto get_object(Descriptor_set *p) noexcept -> Object *;
-
-  auto get_object(Pipeline_layout *p) noexcept -> Object *;
-
-  auto get_object(Compute_pipeline *p) noexcept -> Object *;
-
-  auto get_object(Graphics_pipeline *p) noexcept -> Object *;
-
-  auto get_object(Buffer *p) noexcept -> Object *;
-
-  auto get_object(Image *p) noexcept -> Object *;
-
-  auto get_object(Surface *p) noexcept -> Object *;
-
-  auto get_object(Swapchain *p) noexcept -> Object *;
-
-  auto get_object(Command_buffer *p) noexcept -> Object *;
 
   auto new_descriptor_set_layout(
     Interface *interface,

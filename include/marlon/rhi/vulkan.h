@@ -61,14 +61,26 @@ namespace marlon::rhi::vulkan
 
   auto new_interface(Interface_create_info const &create_info) -> Interface *;
 
-  auto get_interface_base(Interface *interface) noexcept -> rhi::Interface *;
+  auto get_base(Interface *interface) noexcept -> rhi::Interface *;
 
   auto select_device(Interface *interface, Surface *surface) -> void;
 
   auto new_surface(Interface *interface, Surface_create_info const &create_info)
     -> Surface *;
 
-  auto get_surface_base(Surface *surface) noexcept -> rhi::Surface *;
+  auto get_base(Surface *surface) noexcept -> rhi::Surface *;
+
 } // namespace marlon::rhi::vulkan
+
+namespace marlon::rhi
+{
+  template <>
+  auto laundering_cast<vulkan::Interface *>(void *vp) noexcept
+    -> vulkan::Interface *;
+
+  template <>
+  auto laundering_cast<vulkan::Surface *>(void *vp) noexcept
+    -> vulkan::Surface *;
+} // namespace marlon::rhi
 
 #endif

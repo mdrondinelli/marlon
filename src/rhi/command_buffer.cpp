@@ -2,6 +2,17 @@
 
 namespace marlon::rhi
 {
+  auto get_base(Command_buffer *p) noexcept -> Object *
+  {
+    return &p->base;
+  }
+
+  template <>
+  auto laundering_cast<Command_buffer *>(void *vp) noexcept -> Command_buffer *
+  {
+    return std::launder(static_cast<Command_buffer *>(vp));
+  }
+
   auto cmd_bind_compute_pipeline(
     Command_buffer *cmd,
     Compute_pipeline *pipeline

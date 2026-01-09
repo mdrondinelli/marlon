@@ -26,7 +26,7 @@ namespace marlon::rhi
     {
       if (_p)
       {
-        release_object(get_object(_p));
+        release_object(upcast<Object *>(_p));
       }
     }
 
@@ -35,7 +35,7 @@ namespace marlon::rhi
     {
       if (_p)
       {
-        acquire_object(get_object(_p));
+        acquire_object(upcast<Object *>(_p));
       }
     }
 

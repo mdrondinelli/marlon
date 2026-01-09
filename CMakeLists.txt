@@ -10,8 +10,14 @@ add_library(
   src/rhi/interface.cpp
   src/rhi/descriptor_set_layout.cpp
   src/rhi/descriptor_set.cpp
+  src/rhi/pipeline_layout.cpp
+  src/rhi/compute_pipeline.cpp
+  src/rhi/graphics_pipeline.cpp
+  src/rhi/buffer.cpp
+  src/rhi/image.cpp
+  src/rhi/surface.cpp
+  src/rhi/swapchain.cpp
   src/rhi/command_buffer.cpp
-  src/rhi/ptr.cpp
 )
 
 add_library(

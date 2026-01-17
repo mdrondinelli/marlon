@@ -2,6 +2,8 @@
 #define MARLON_RHI_RHI_H
 
 #include <cstdint>
+
+#include <atomic>
 #include <span>
 
 #include <marlon/concepts.h>
@@ -9,93 +11,6 @@
 
 namespace marlon::rhi
 {
-  template <typename T>
-  concept HasGetBase = requires(T p) {
-    {
-      get_base(p)
-    } noexcept;
-  };
-
-  template <HasGetBase T>
-  struct Get_base
-  {
-    auto operator()(T p)
-    {
-      return get_base(p);
-    }
-  };
-
-  template <HasGetBase T>
-  struct Base
-  {
-    using type = std::invoke_result_t<Get_base<T>, T>;
-  };
-
-  template <HasGetBase T>
-  using Base_t = Base<T>::type;
-
-  template <marlon::Pointer T>
-  auto laundering_cast(void *vp) noexcept -> T;
-
-  template <typename T>
-  concept HasLaunderingCast = requires(T p, void *vp) {
-    {
-      laundering_cast<T>(vp)
-    } -> std::same_as<T>;
-  };
-
-  template <typename T>
-  concept ObjectHandle = HasGetBase<T> && HasLaunderingCast<T>;
-
-  template <ObjectHandle T, ObjectHandle U>
-  struct Is_base_of: Is_base_of<T, Base_t<U>>
-  {
-  };
-
-  template <ObjectHandle T>
-  struct Is_base_of<T, T>: std::true_type
-  {
-  };
-
-  template <ObjectHandle T>
-  struct Is_base_of<Base_t<T>, T>: std::true_type
-  {
-  };
-
-  template <ObjectHandle T, ObjectHandle U>
-    requires std::same_as<Base_t<U>, std::nullptr_t>
-  struct Is_base_of<T, U>: std::false_type
-  {
-  };
-
-  template <ObjectHandle T, ObjectHandle U>
-  constexpr bool Is_base_of_v = Is_base_of<T, U>::value;
-
-  template <typename T, typename U>
-  concept BaseOf = ObjectHandle<T> && ObjectHandle<U> && Is_base_of_v<T, U>;
-
-  template <ObjectHandle T, ObjectHandle U>
-    requires BaseOf<T, U>
-  auto upcast(U p) noexcept -> T
-  {
-    if constexpr (std::is_same_v<T, U>)
-    {
-      return p;
-    }
-    else
-    {
-
-      return upcast<T>(get_base(p));
-    }
-  }
-
-  template <ObjectHandle T, ObjectHandle U>
-    requires BaseOf<U, T>
-  auto downcast(U p) noexcept -> T
-  {
-    return laundering_cast<T>(p);
-  }
-
   struct Object;
   struct Interface;
   struct Descriptor_set_layout;
@@ -108,70 +23,6 @@ namespace marlon::rhi
   struct Surface;
   struct Swapchain;
   struct Command_buffer;
-
-  constexpr auto get_base(Object *) noexcept -> std::nullptr_t
-  {
-    return nullptr;
-  }
-
-  auto get_base(Interface *p) noexcept -> Object *;
-
-  auto get_base(Descriptor_set_layout *p) noexcept -> Object *;
-
-  auto get_base(Descriptor_set *p) noexcept -> Object *;
-
-  auto get_base(Pipeline_layout *p) noexcept -> Object *;
-
-  auto get_base(Compute_pipeline *p) noexcept -> Object *;
-
-  auto get_base(Graphics_pipeline *p) noexcept -> Object *;
-
-  auto get_base(Buffer *p) noexcept -> Object *;
-
-  auto get_base(Image *p) noexcept -> Object *;
-
-  auto get_base(Surface *p) noexcept -> Object *;
-
-  auto get_base(Swapchain *p) noexcept -> Object *;
-
-  auto get_base(Command_buffer *p) noexcept -> Object *;
-
-  template <>
-  auto laundering_cast<Interface *>(void *vp) noexcept -> Interface *;
-
-  template <>
-  auto laundering_cast<Descriptor_set_layout *>(void *vp) noexcept
-    -> Descriptor_set_layout *;
-
-  template <>
-  auto laundering_cast<Descriptor_set *>(void *vp) noexcept -> Descriptor_set *;
-
-  template <>
-  auto laundering_cast<Pipeline_layout *>(void *vp) noexcept
-    -> Pipeline_layout *;
-
-  template <>
-  auto laundering_cast<Compute_pipeline *>(void *vp) noexcept
-    -> Compute_pipeline *;
-
-  template <>
-  auto laundering_cast<Graphics_pipeline *>(void *vp) noexcept
-    -> Graphics_pipeline *;
-
-  template <>
-  auto laundering_cast<Buffer *>(void *vp) noexcept -> Buffer *;
-
-  template <>
-  auto laundering_cast<Image *>(void *vp) noexcept -> Image *;
-
-  template <>
-  auto laundering_cast<Surface *>(void *vp) noexcept -> Surface *;
-
-  template <>
-  auto laundering_cast<Swapchain *>(void *vp) noexcept -> Swapchain *;
-
-  template <>
-  auto laundering_cast<Command_buffer *>(void *vp) noexcept -> Command_buffer *;
 
   enum class Shader_stage_bit
   {
@@ -370,88 +221,169 @@ namespace marlon::rhi
     Barrier_access_bitset access_bits;
   };
 
-  auto acquire_object(Object *p) noexcept -> Object *;
+  struct Deallocator
+  {
+    virtual ~Deallocator() = default;
 
-  auto release_object(Object *p) noexcept -> void;
+    virtual void free(Object *object, std::size_t size) noexcept = 0;
+  };
 
-  auto new_descriptor_set_layout(
-    Interface *interface,
-    Descriptor_set_layout_create_info const &create_info
-  ) -> Descriptor_set_layout *;
+  struct Object
+  {
+    explicit Object(Deallocator *deallocator, std::size_t size);
 
-  auto new_descriptor_set(
-    Interface *interface,
-    Descriptor_set_create_info const &create_info
-  ) -> Descriptor_set *;
+    virtual ~Object() = default;
 
-  auto new_pipeline_layout(
-    Interface *interface,
-    Pipeline_layout_create_info const &create_info
-  ) -> Pipeline_layout *;
+    auto acquire() noexcept -> void;
 
-  auto new_compute_pipeline(
-    Interface *interface,
-    Compute_pipeline_create_info const &create_info
-  ) -> Compute_pipeline *;
+    auto release() noexcept -> void;
 
-  auto new_graphics_pipeline(
-    Interface *interface,
-    Graphics_pipeline_create_info const &create_info
-  ) -> Graphics_pipeline *;
+  private:
+    Deallocator *_deallocator;
+    std::size_t _size;
+    std::atomic<std::uint32_t> _reference_count{1};
+  };
 
-  auto new_buffer(Interface *interface, Buffer_create_info const &create_info)
-    -> Buffer *;
+  struct Interface: Object
+  {
+    explicit Interface(Deallocator *deallocator, std::size_t size) noexcept;
 
-  auto new_image(Interface *interface, Image_create_info const &create_info)
-    -> Image *;
+    virtual auto new_descriptor_set_layout(
+      Descriptor_set_layout_create_info const &create_info
+    ) -> Descriptor_set_layout * = 0;
 
-  auto new_swapchain(
-    Interface *interface,
-    Swapchain_create_info const &create_info
-  ) -> Swapchain *;
+    virtual auto
+    new_descriptor_set(Descriptor_set_create_info const &create_info)
+      -> Descriptor_set * = 0;
 
-  auto new_command_buffer(
-    Interface *interface,
-    Command_buffer_create_info const &create_info
-  ) -> Command_buffer *;
+    virtual auto
+    new_pipeline_layout(Pipeline_layout_create_info const &create_info)
+      -> Pipeline_layout * = 0;
 
-  auto cmd_bind_compute_pipeline(
-    Command_buffer *cmd,
-    Compute_pipeline *pipeline
-  ) -> void;
+    virtual auto
+    new_compute_pipeline(Compute_pipeline_create_info const &create_info)
+      -> Compute_pipeline * = 0;
 
-  auto cmd_bind_graphics_pipeline(
-    Command_buffer *cmd,
-    Graphics_pipeline *pipeline
-  ) -> void;
+    virtual auto
+    new_graphics_pipeline(Graphics_pipeline_create_info const &create_info)
+      -> Graphics_pipeline * = 0;
 
-  auto cmd_bind_descriptor_set(
-    Command_buffer *cmd,
-    std::uint32_t index,
-    Descriptor_set *descriptor_set
-  ) -> void;
+    virtual auto new_buffer(Buffer_create_info const &create_info)
+      -> Buffer * = 0;
 
-  auto cmd_dispatch(
-    Command_buffer *cmd,
-    Buffer *argument_buffer,
-    std::uint64_t argument_offset
-  ) -> void;
+    virtual auto new_image(Image_create_info const &create_info) -> Image * = 0;
 
-  auto cmd_draw(
-    Command_buffer *cmd,
-    Buffer *argument_buffer,
-    std::uint64_t argument_offset,
-    std::uint32_t argument_stride,
-    Buffer *count_buffer,
-    std::uint64_t count_offset,
-    std::uint32_t max_count
-  ) -> void;
+    virtual auto new_swapchain(Swapchain_create_info const &create_info)
+      -> Swapchain * = 0;
 
-  auto cmd_barrier(
-    Command_buffer *cmd,
-    Barrier_scope const &src,
-    Barrier_scope const &dst
-  ) -> void;
+    virtual auto
+    new_command_buffer(Command_buffer_create_info const &create_info)
+      -> Command_buffer * = 0;
+  };
+
+  struct Descriptor_set_layout: Object
+  {
+    explicit Descriptor_set_layout(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Descriptor_set: Object
+  {
+    explicit Descriptor_set(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Pipeline_layout: Object
+  {
+    explicit Pipeline_layout(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Compute_pipeline: Object
+  {
+    explicit Compute_pipeline(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Graphics_pipeline: Object
+  {
+    explicit Graphics_pipeline(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Buffer: Object
+  {
+    explicit Buffer(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Image: Object
+  {
+    explicit Image(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Surface: Object
+  {
+    explicit Surface(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Swapchain: Object
+  {
+    explicit Swapchain(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Command_buffer: Object
+  {
+    explicit Command_buffer(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+
+    virtual auto
+    cmd_bind_compute_pipeline(Command_buffer *cmd, Compute_pipeline *pipeline)
+      -> void = 0;
+
+    virtual auto
+    cmd_bind_graphics_pipeline(Command_buffer *cmd, Graphics_pipeline *pipeline)
+      -> void = 0;
+
+    virtual auto cmd_bind_descriptor_set(
+      Command_buffer *cmd,
+      std::uint32_t index,
+      Descriptor_set *descriptor_set
+    ) -> void = 0;
+
+    virtual auto cmd_dispatch(
+      Command_buffer *cmd,
+      Buffer *argument_buffer,
+      std::uint64_t argument_offset
+    ) -> void = 0;
+
+    virtual auto cmd_draw(
+      Command_buffer *cmd,
+      Buffer *argument_buffer,
+      std::uint64_t argument_offset,
+      std::uint32_t argument_stride,
+      Buffer *count_buffer,
+      std::uint64_t count_offset,
+      std::uint32_t max_count
+    ) -> void = 0;
+
+    virtual auto cmd_barrier(
+      Command_buffer *cmd,
+      Barrier_scope const &src,
+      Barrier_scope const &dst
+    ) -> void = 0;
+  };
 } // namespace marlon::rhi
 
 #endif

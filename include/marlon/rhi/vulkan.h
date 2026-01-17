@@ -4,13 +4,14 @@
 #include <exception>
 #include <span>
 
+#include <volk.h>
+
 #include <marlon/enum_bitset.h>
 #include <marlon/rhi/rhi.h>
 
 namespace marlon::rhi::vulkan
 {
   struct Interface;
-  struct Surface;
 
   enum class Interface_create_bit
   {
@@ -46,7 +47,7 @@ namespace marlon::rhi::vulkan
 
   struct Surface_create_info
   {
-    std::uint64_t vk_handle;
+    VkSurfaceKHR vk_handle;
   };
 
   struct Error: std::exception
@@ -59,28 +60,48 @@ namespace marlon::rhi::vulkan
     int code;
   };
 
+  struct Interface: rhi::Interface
+  {
+    explicit Interface(
+      rhi::Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+
+    virtual auto new_surface(Surface_create_info const &create_info)
+      -> rhi::Surface * = 0;
+
+    virtual auto select_device(rhi::Surface *surface) -> void = 0;
+
+    auto new_descriptor_set_layout(
+      Descriptor_set_layout_create_info const &create_info
+    ) -> rhi::Descriptor_set_layout * override;
+
+    auto new_descriptor_set(Descriptor_set_create_info const &create_info)
+      -> rhi::Descriptor_set * override;
+
+    auto new_pipeline_layout(Pipeline_layout_create_info const &create_info)
+      -> rhi::Pipeline_layout * override;
+
+    auto new_compute_pipeline(Compute_pipeline_create_info const &create_info)
+      -> rhi::Compute_pipeline * override;
+
+    auto new_graphics_pipeline(Graphics_pipeline_create_info const &create_info)
+      -> rhi::Graphics_pipeline * override;
+
+    auto new_buffer(Buffer_create_info const &create_info)
+      -> rhi::Buffer * override;
+
+    auto new_image(Image_create_info const &create_info)
+      -> rhi::Image * override;
+
+    auto new_swapchain(Swapchain_create_info const &create_info)
+      -> rhi::Swapchain * override;
+
+    auto new_command_buffer(Command_buffer_create_info const &create_info)
+      -> rhi::Command_buffer * override;
+  };
+
   auto new_interface(Interface_create_info const &create_info) -> Interface *;
-
-  auto get_base(Interface *interface) noexcept -> rhi::Interface *;
-
-  auto select_device(Interface *interface, Surface *surface) -> void;
-
-  auto new_surface(Interface *interface, Surface_create_info const &create_info)
-    -> Surface *;
-
-  auto get_base(Surface *surface) noexcept -> rhi::Surface *;
-
 } // namespace marlon::rhi::vulkan
-
-namespace marlon::rhi
-{
-  template <>
-  auto laundering_cast<vulkan::Interface *>(void *vp) noexcept
-    -> vulkan::Interface *;
-
-  template <>
-  auto laundering_cast<vulkan::Surface *>(void *vp) noexcept
-    -> vulkan::Surface *;
-} // namespace marlon::rhi
 
 #endif

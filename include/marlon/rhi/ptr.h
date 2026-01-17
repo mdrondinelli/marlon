@@ -1,19 +1,20 @@
 #ifndef MARLON_RHI_PTR_H
 #define MARLON_RHI_PTR_H
 
+#include <concepts>
 #include <utility>
 
 #include <marlon/rhi/rhi.h>
 
 namespace marlon::rhi
 {
-  template <typename T>
+  template <std::derived_from<Object> T>
   struct Ptr;
 
-  template <typename T>
+  template <std::derived_from<Object> T>
   constexpr auto capture(T *&&p) -> Ptr<T>;
 
-  template <typename T>
+  template <std::derived_from<Object> T>
   struct Ptr
   {
     constexpr Ptr() noexcept = default;
@@ -26,7 +27,7 @@ namespace marlon::rhi
     {
       if (_p)
       {
-        release_object(upcast<Object *>(_p));
+        _p->release();
       }
     }
 
@@ -35,7 +36,7 @@ namespace marlon::rhi
     {
       if (_p)
       {
-        acquire_object(upcast<Object *>(_p));
+        _p->acquire();
       }
     }
 

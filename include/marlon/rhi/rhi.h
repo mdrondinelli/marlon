@@ -103,14 +103,14 @@ namespace marlon::rhi
       requires std::derived_from<T, U>
     constexpr operator Ptr<U>() && noexcept
     {
-      return move_ptr(static_cast<U*>(_p));
+      return move_ptr(static_cast<U *>(_p));
     }
 
     template <typename U>
       requires std::derived_from<T, U>
     operator Ptr<U>() const noexcept
     {
-      return copy_ptr(static_cast<U*>(_p));
+      return copy_ptr(static_cast<U *>(_p));
     }
 
     template <typename U>
@@ -156,12 +156,12 @@ namespace marlon::rhi
   };
 
   template <typename T>
-  struct Is_ptr : std::false_type
+  struct Is_ptr: std::false_type
   {
   };
 
   template <typename T>
-  struct Is_ptr<Ptr<T>> : std::true_type
+  struct Is_ptr<Ptr<T>>: std::true_type
   {
   };
 
@@ -344,7 +344,8 @@ namespace marlon::rhi
     virtual auto new_buffer(Buffer_create_info const &create_info)
       -> Ptr<Buffer> = 0;
 
-    virtual auto new_image(Image_create_info const &create_info) -> Ptr<Image> = 0;
+    virtual auto new_image(Image_create_info const &create_info)
+      -> Ptr<Image> = 0;
 
     virtual auto new_swapchain(Swapchain_create_info const &create_info)
       -> Ptr<Swapchain> = 0;

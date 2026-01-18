@@ -437,9 +437,8 @@ namespace marlon::rhi::vulkan
       return nullptr;
     }
 
-    auto Interface_impl::new_command_buffer(
-      Command_buffer_create_info const &
-    ) -> rhi::Ptr<rhi::Command_buffer>
+    auto Interface_impl::new_command_buffer(Command_buffer_create_info const &)
+      -> rhi::Ptr<rhi::Command_buffer>
     {
       return nullptr;
     }

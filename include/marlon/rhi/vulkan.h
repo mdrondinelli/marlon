@@ -47,6 +47,8 @@ namespace marlon::rhi::vulkan
 
   struct Surface_create_info
   {
+    // The handle of the underlying Vulkan surface.
+    // `Interface::create_surface` takes ownership of this handle.
     VkSurfaceKHR vk_handle;
   };
 
@@ -67,41 +69,43 @@ namespace marlon::rhi::vulkan
       std::size_t size
     ) noexcept;
 
-    virtual auto new_surface(Surface_create_info const &create_info)
-      -> rhi::Surface * = 0;
+    virtual auto get_vk_instance() const noexcept -> VkInstance = 0;
 
-    virtual auto select_device(rhi::Surface *surface) -> void = 0;
+    virtual auto new_surface(Surface_create_info const &create_info)
+      -> rhi::Ptr<rhi::Surface> = 0;
+
+    virtual auto select_device(rhi::Ptr<rhi::Surface> surface) -> void = 0;
 
     auto new_descriptor_set_layout(
       Descriptor_set_layout_create_info const &create_info
-    ) -> rhi::Descriptor_set_layout * override;
+    ) -> rhi::Ptr<rhi::Descriptor_set_layout> override;
 
     auto new_descriptor_set(Descriptor_set_create_info const &create_info)
-      -> rhi::Descriptor_set * override;
+      -> rhi::Ptr<rhi::Descriptor_set> override;
 
     auto new_pipeline_layout(Pipeline_layout_create_info const &create_info)
-      -> rhi::Pipeline_layout * override;
+      -> rhi::Ptr<rhi::Pipeline_layout> override;
 
     auto new_compute_pipeline(Compute_pipeline_create_info const &create_info)
-      -> rhi::Compute_pipeline * override;
+      -> rhi::Ptr<rhi::Compute_pipeline> override;
 
     auto new_graphics_pipeline(Graphics_pipeline_create_info const &create_info)
-      -> rhi::Graphics_pipeline * override;
+      -> rhi::Ptr<rhi::Graphics_pipeline> override;
 
     auto new_buffer(Buffer_create_info const &create_info)
-      -> rhi::Buffer * override;
+      -> rhi::Ptr<rhi::Buffer> override;
 
     auto new_image(Image_create_info const &create_info)
-      -> rhi::Image * override;
+      -> rhi::Ptr<rhi::Image> override;
 
     auto new_swapchain(Swapchain_create_info const &create_info)
-      -> rhi::Swapchain * override;
+      -> rhi::Ptr<rhi::Swapchain> override;
 
     auto new_command_buffer(Command_buffer_create_info const &create_info)
-      -> rhi::Command_buffer * override;
+      -> rhi::Ptr<rhi::Command_buffer> override;
   };
 
-  auto new_interface(Interface_create_info const &create_info) -> Interface *;
+  auto new_interface(Interface_create_info const &create_info) -> Ptr<Interface>;
 } // namespace marlon::rhi::vulkan
 
 #endif

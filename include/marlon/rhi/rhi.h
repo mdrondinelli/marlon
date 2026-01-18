@@ -4,7 +4,9 @@
 #include <cstdint>
 
 #include <atomic>
+#include <concepts>
 #include <span>
+#include <utility>
 
 #include <marlon/concepts.h>
 #include <marlon/enum_bitset.h>
@@ -12,17 +14,346 @@
 namespace marlon::rhi
 {
   struct Object;
-  struct Interface;
-  struct Descriptor_set_layout;
-  struct Descriptor_set;
-  struct Pipeline_layout;
-  struct Compute_pipeline;
-  struct Graphics_pipeline;
-  struct Buffer;
-  struct Image;
-  struct Surface;
-  struct Swapchain;
-  struct Command_buffer;
+
+  template <std::derived_from<Object> T>
+  struct Ptr;
+
+  template <std::derived_from<Object> T>
+  constexpr auto move_ptr(T *p) noexcept -> Ptr<T>;
+
+  template <std::derived_from<Object> T>
+  auto copy_ptr(T *p) noexcept -> Ptr<T>;
+
+  template <typename T>
+  struct Is_ptr;
+
+  template <typename T>
+  constexpr auto Is_ptr_v = Is_ptr<T>::value;
+
+  template <std::derived_from<Object> T>
+  struct Ptr
+  {
+    using Value_type = T;
+
+    constexpr Ptr() noexcept = default;
+
+    constexpr Ptr(std::nullptr_t) noexcept
+    {
+    }
+
+    ~Ptr()
+    {
+      if (_p)
+      {
+        _p->release();
+      }
+    }
+
+    Ptr(Ptr const &other) noexcept
+        : _p{other._p}
+    {
+      if (_p)
+      {
+        _p->acquire();
+      }
+    }
+
+    Ptr &operator=(Ptr const &other) noexcept
+    {
+      auto temp{other};
+      swap(temp);
+      return *this;
+    }
+
+    constexpr Ptr(Ptr &&other) noexcept
+        : _p{std::exchange(other._p, nullptr)}
+    {
+    }
+
+    constexpr Ptr &operator=(Ptr &&other) noexcept
+    {
+      auto temp{std::move(other)};
+      swap(temp);
+      return *this;
+    }
+
+    constexpr auto operator*() const noexcept -> T &
+    {
+      return *_p;
+    }
+
+    constexpr auto operator->() const noexcept -> T *
+    {
+      return _p;
+    }
+
+    constexpr auto get() const noexcept -> T *
+    {
+      return _p;
+    }
+
+    constexpr auto release() noexcept -> T *
+    {
+      auto temp{_p};
+      _p = nullptr;
+      return temp;
+    }
+
+    template <typename U>
+      requires std::derived_from<T, U>
+    constexpr operator Ptr<U>() && noexcept
+    {
+      return move_ptr(static_cast<U*>(_p));
+    }
+
+    template <typename U>
+      requires std::derived_from<T, U>
+    operator Ptr<U>() const noexcept
+    {
+      return copy_ptr(static_cast<U*>(_p));
+    }
+
+    template <typename U>
+      requires Is_ptr_v<U>
+    constexpr explicit operator U() && noexcept
+    {
+      auto const p = _p;
+      _p = nullptr;
+      return move_ptr(static_cast<U::Value_type *>(p));
+    }
+
+    template <typename U>
+      requires Is_ptr_v<U>
+    explicit operator U() const noexcept
+    {
+      return copy_ptr(static_cast<U::Value_type *>(_p));
+    }
+
+  private:
+    struct Move_tag
+    {
+    };
+
+    struct Copy_tag
+    {
+    };
+
+    friend constexpr auto move_ptr<T>(T *p) noexcept -> Ptr<T>;
+
+    friend auto copy_ptr<T>(T *p) noexcept -> Ptr<T>;
+
+    constexpr explicit Ptr(T *p) noexcept
+        : _p{p}
+    {
+    }
+
+    constexpr auto swap(Ptr &other) noexcept -> void
+    {
+      std::swap(_p, other._p);
+    }
+
+    T *_p{};
+  };
+
+  template <typename T>
+  struct Is_ptr : std::false_type
+  {
+  };
+
+  template <typename T>
+  struct Is_ptr<Ptr<T>> : std::true_type
+  {
+  };
+
+  template <std::derived_from<Object> T>
+  constexpr auto move_ptr(T *p) noexcept -> Ptr<T>
+  {
+    return Ptr<T>{p};
+  }
+
+  template <std::derived_from<Object> T>
+  auto copy_ptr(T *p) noexcept -> Ptr<T>
+  {
+    p->acquire();
+    return Ptr<T>{p};
+  }
+
+  struct Deallocator
+  {
+    virtual ~Deallocator() = default;
+
+    virtual void free(Object *object, std::size_t size) noexcept = 0;
+  };
+
+  struct Object
+  {
+    explicit Object(Deallocator *deallocator, std::size_t size);
+
+    virtual ~Object() = default;
+
+    auto acquire() noexcept -> void;
+
+    auto release() noexcept -> void;
+
+  private:
+    Deallocator *_deallocator;
+    std::size_t _size;
+    std::atomic<std::uint32_t> _reference_count{1};
+  };
+
+  struct Descriptor_set_layout: Object
+  {
+    explicit Descriptor_set_layout(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Descriptor_set: Object
+  {
+    explicit Descriptor_set(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+
+  struct Pipeline_layout: Object
+  {
+    explicit Pipeline_layout(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Compute_pipeline: Object
+  {
+    explicit Compute_pipeline(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Graphics_pipeline: Object
+  {
+    explicit Graphics_pipeline(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+  };
+
+  struct Buffer: Object
+  {
+    explicit Buffer(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Image: Object
+  {
+    explicit Image(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Surface: Object
+  {
+    explicit Surface(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Swapchain: Object
+  {
+    explicit Swapchain(Deallocator *deallocator, std::size_t size) noexcept;
+  };
+
+  struct Barrier_scope;
+
+  struct Command_buffer: Object
+  {
+    explicit Command_buffer(
+      Deallocator *deallocator,
+      std::size_t size
+    ) noexcept;
+
+    virtual auto
+    cmd_bind_compute_pipeline(Command_buffer *cmd, Compute_pipeline *pipeline)
+      -> void = 0;
+
+    virtual auto
+    cmd_bind_graphics_pipeline(Command_buffer *cmd, Graphics_pipeline *pipeline)
+      -> void = 0;
+
+    virtual auto cmd_bind_descriptor_set(
+      Command_buffer *cmd,
+      std::uint32_t index,
+      Descriptor_set *descriptor_set
+    ) -> void = 0;
+
+    virtual auto cmd_dispatch(
+      Command_buffer *cmd,
+      Buffer *argument_buffer,
+      std::uint64_t argument_offset
+    ) -> void = 0;
+
+    virtual auto cmd_draw(
+      Command_buffer *cmd,
+      Buffer *argument_buffer,
+      std::uint64_t argument_offset,
+      std::uint32_t argument_stride,
+      Buffer *count_buffer,
+      std::uint64_t count_offset,
+      std::uint32_t max_count
+    ) -> void = 0;
+
+    virtual auto cmd_barrier(
+      Command_buffer *cmd,
+      Barrier_scope const &src,
+      Barrier_scope const &dst
+    ) -> void = 0;
+  };
+
+  struct Descriptor_set_layout_create_info;
+  struct Descriptor_set_create_info;
+  struct Pipeline_layout_create_info;
+  struct Compute_pipeline_create_info;
+  struct Graphics_pipeline_create_info;
+  struct Buffer_create_info;
+  struct Image_create_info;
+  struct Swapchain_create_info;
+  struct Command_buffer_create_info;
+
+  struct Interface: Object
+  {
+    explicit Interface(Deallocator *deallocator, std::size_t size) noexcept;
+
+    virtual auto new_descriptor_set_layout(
+      Descriptor_set_layout_create_info const &create_info
+    ) -> Ptr<Descriptor_set_layout> = 0;
+
+    virtual auto
+    new_descriptor_set(Descriptor_set_create_info const &create_info)
+      -> Ptr<Descriptor_set> = 0;
+
+    virtual auto
+    new_pipeline_layout(Pipeline_layout_create_info const &create_info)
+      -> Ptr<Pipeline_layout> = 0;
+
+    virtual auto
+    new_compute_pipeline(Compute_pipeline_create_info const &create_info)
+      -> Ptr<Compute_pipeline> = 0;
+
+    virtual auto
+    new_graphics_pipeline(Graphics_pipeline_create_info const &create_info)
+      -> Ptr<Graphics_pipeline> = 0;
+
+    virtual auto new_buffer(Buffer_create_info const &create_info)
+      -> Ptr<Buffer> = 0;
+
+    virtual auto new_image(Image_create_info const &create_info) -> Ptr<Image> = 0;
+
+    virtual auto new_swapchain(Swapchain_create_info const &create_info)
+      -> Ptr<Swapchain> = 0;
+
+    virtual auto
+    new_command_buffer(Command_buffer_create_info const &create_info)
+      -> Ptr<Command_buffer> = 0;
+  };
 
   enum class Shader_stage_bit
   {
@@ -153,49 +484,64 @@ namespace marlon::rhi
   {
     // SAMPLER
     sampler = 0,
+
     // COMBINED_IMAGE_SAMPLER
     combined_image_sampler = 1,
+
     // SAMPLED_IMAGE
     sampled_image = 2,
+
     // STORAGE_IMAGE
     storage_image = 3,
+
     // UNIFORM_BUFFER
     uniform_buffer = 6,
+
     // STORAGE_BUFFER
     storage_buffer = 7,
   };
 
   struct Descriptor_set_layout_binding
   {
+    /// The index of the binding within the descriptor set.
     std::uint32_t index;
+
+    /// The type of descriptor attached to the binding.
     Descriptor_type descriptor_type;
+
+    /// The number of descriptors attached to the binding.
     std::uint32_t descriptor_count;
+
+    /// The shader stages which can access the binding.
     Shader_stage_bitset stage_bits;
   };
 
   struct Descriptor_set_layout_create_info
   {
+    /// The bindings of the descriptor set.
     std::span<Descriptor_set_layout_binding const> bindings;
   };
 
   struct Descriptor_set_create_info
   {
-    Descriptor_set_layout *layout;
+    // The layout of the descriptor set.
+    Ptr<Descriptor_set_layout> layout;
   };
 
   struct Pipeline_layout_create_info
   {
-    std::span<Descriptor_set_layout * const> descriptor_set_layouts;
+    // The descriptor set layouts of the pipeline layout.
+    std::span<Ptr<Descriptor_set_layout> const> descriptor_set_layouts;
   };
 
   struct Compute_pipeline_create_info
   {
-    Pipeline_layout *layout;
+    Ptr<Pipeline_layout> layout;
   };
 
   struct Graphics_pipeline_create_info
   {
-    Pipeline_layout *layout;
+    Ptr<Pipeline_layout> layout;
   };
 
   struct Buffer_create_info
@@ -208,7 +554,7 @@ namespace marlon::rhi
 
   struct Swapchain_create_info
   {
-    Surface *surface;
+    Ptr<Surface> surface;
   };
 
   struct Command_buffer_create_info
@@ -219,170 +565,6 @@ namespace marlon::rhi
   {
     Pipeline_stage_bitset stage_bits;
     Barrier_access_bitset access_bits;
-  };
-
-  struct Deallocator
-  {
-    virtual ~Deallocator() = default;
-
-    virtual void free(Object *object, std::size_t size) noexcept = 0;
-  };
-
-  struct Object
-  {
-    explicit Object(Deallocator *deallocator, std::size_t size);
-
-    virtual ~Object() = default;
-
-    auto acquire() noexcept -> void;
-
-    auto release() noexcept -> void;
-
-  private:
-    Deallocator *_deallocator;
-    std::size_t _size;
-    std::atomic<std::uint32_t> _reference_count{1};
-  };
-
-  struct Interface: Object
-  {
-    explicit Interface(Deallocator *deallocator, std::size_t size) noexcept;
-
-    virtual auto new_descriptor_set_layout(
-      Descriptor_set_layout_create_info const &create_info
-    ) -> Descriptor_set_layout * = 0;
-
-    virtual auto
-    new_descriptor_set(Descriptor_set_create_info const &create_info)
-      -> Descriptor_set * = 0;
-
-    virtual auto
-    new_pipeline_layout(Pipeline_layout_create_info const &create_info)
-      -> Pipeline_layout * = 0;
-
-    virtual auto
-    new_compute_pipeline(Compute_pipeline_create_info const &create_info)
-      -> Compute_pipeline * = 0;
-
-    virtual auto
-    new_graphics_pipeline(Graphics_pipeline_create_info const &create_info)
-      -> Graphics_pipeline * = 0;
-
-    virtual auto new_buffer(Buffer_create_info const &create_info)
-      -> Buffer * = 0;
-
-    virtual auto new_image(Image_create_info const &create_info) -> Image * = 0;
-
-    virtual auto new_swapchain(Swapchain_create_info const &create_info)
-      -> Swapchain * = 0;
-
-    virtual auto
-    new_command_buffer(Command_buffer_create_info const &create_info)
-      -> Command_buffer * = 0;
-  };
-
-  struct Descriptor_set_layout: Object
-  {
-    explicit Descriptor_set_layout(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-  };
-
-  struct Descriptor_set: Object
-  {
-    explicit Descriptor_set(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-  };
-
-  struct Pipeline_layout: Object
-  {
-    explicit Pipeline_layout(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-  };
-
-  struct Compute_pipeline: Object
-  {
-    explicit Compute_pipeline(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-  };
-
-  struct Graphics_pipeline: Object
-  {
-    explicit Graphics_pipeline(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-  };
-
-  struct Buffer: Object
-  {
-    explicit Buffer(Deallocator *deallocator, std::size_t size) noexcept;
-  };
-
-  struct Image: Object
-  {
-    explicit Image(Deallocator *deallocator, std::size_t size) noexcept;
-  };
-
-  struct Surface: Object
-  {
-    explicit Surface(Deallocator *deallocator, std::size_t size) noexcept;
-  };
-
-  struct Swapchain: Object
-  {
-    explicit Swapchain(Deallocator *deallocator, std::size_t size) noexcept;
-  };
-
-  struct Command_buffer: Object
-  {
-    explicit Command_buffer(
-      Deallocator *deallocator,
-      std::size_t size
-    ) noexcept;
-
-    virtual auto
-    cmd_bind_compute_pipeline(Command_buffer *cmd, Compute_pipeline *pipeline)
-      -> void = 0;
-
-    virtual auto
-    cmd_bind_graphics_pipeline(Command_buffer *cmd, Graphics_pipeline *pipeline)
-      -> void = 0;
-
-    virtual auto cmd_bind_descriptor_set(
-      Command_buffer *cmd,
-      std::uint32_t index,
-      Descriptor_set *descriptor_set
-    ) -> void = 0;
-
-    virtual auto cmd_dispatch(
-      Command_buffer *cmd,
-      Buffer *argument_buffer,
-      std::uint64_t argument_offset
-    ) -> void = 0;
-
-    virtual auto cmd_draw(
-      Command_buffer *cmd,
-      Buffer *argument_buffer,
-      std::uint64_t argument_offset,
-      std::uint32_t argument_stride,
-      Buffer *count_buffer,
-      std::uint64_t count_offset,
-      std::uint32_t max_count
-    ) -> void = 0;
-
-    virtual auto cmd_barrier(
-      Command_buffer *cmd,
-      Barrier_scope const &src,
-      Barrier_scope const &dst
-    ) -> void = 0;
   };
 } // namespace marlon::rhi
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.22)
 project(marlon LANGUAGES C CXX)
 
 add_subdirectory(dependencies/Catch2-3.11.0)
@@ -6,18 +6,7 @@ add_subdirectory(dependencies/Vulkan-Headers)
 
 add_library(
   rhi
-  src/rhi/object.cpp
-  src/rhi/interface.cpp
-  src/rhi/descriptor_set_layout.cpp
-  src/rhi/descriptor_set.cpp
-  src/rhi/pipeline_layout.cpp
-  src/rhi/compute_pipeline.cpp
-  src/rhi/graphics_pipeline.cpp
-  src/rhi/buffer.cpp
-  src/rhi/image.cpp
-  src/rhi/surface.cpp
-  src/rhi/swapchain.cpp
-  src/rhi/command_buffer.cpp
+  src/rhi/rhi.cpp
 )
 
 add_library(

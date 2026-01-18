@@ -283,7 +283,7 @@ namespace marlon::rhi::vulkan
       rhi::Deallocator *deallocator,
       Interface_create_info const &create_info
     )
-        : Interface{deallocator, sizeof(Interface_impl)},
+        : Interface{deallocator, sizeof(*this)},
           vk_instance{
             [&]()
             {
@@ -448,7 +448,7 @@ namespace marlon::rhi::vulkan
       rhi::Ptr<Interface_impl> parent,
       Surface_create_info const &create_info
     ) noexcept
-        : rhi::Surface{deallocator, sizeof(Surface_impl)},
+        : rhi::Surface{deallocator, sizeof(*this)},
           parent{std::move(parent)},
           vk_handle{parent->vk_instance.get(), create_info.vk_handle}
     {
@@ -459,8 +459,7 @@ namespace marlon::rhi::vulkan
       rhi::Ptr<Interface_impl> parent,
       Descriptor_set_layout_create_info const &create_info
     )
-        : rhi::
-            Descriptor_set_layout{deallocator, sizeof(Descriptor_set_layout_impl)},
+        : rhi::Descriptor_set_layout{deallocator, sizeof(*this)},
           parent{std::move(parent)},
           vk_handle{
             [&]()
@@ -514,7 +513,7 @@ namespace marlon::rhi::vulkan
       rhi::Ptr<Interface_impl> parent,
       Pipeline_layout_create_info const &create_info
     )
-        : rhi::Pipeline_layout{deallocator, sizeof(Pipeline_layout_impl)},
+        : rhi::Pipeline_layout{deallocator, sizeof(*this)},
           parent{std::move(parent)},
           descriptor_set_layouts{
             [&]()

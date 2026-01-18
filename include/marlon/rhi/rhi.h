@@ -217,7 +217,6 @@ namespace marlon::rhi
     ) noexcept;
   };
 
-
   struct Pipeline_layout: Object
   {
     explicit Pipeline_layout(

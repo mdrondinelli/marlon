@@ -22,6 +22,11 @@ target_include_directories(
 )
 target_link_libraries(
   rhi-vulkan
+  PUBLIC  
+  rhi
+)
+target_link_libraries(
+  rhi-vulkan
   PRIVATE
   Vulkan::Headers
 )
@@ -36,11 +41,22 @@ target_link_libraries(
   Catch2::Catch2WithMain
 )
 
+add_executable(
+  test-rhi-render_to_ppm
+  tests/rhi/render_to_ppm/main.cpp
+)
+target_link_libraries(
+  test-rhi-render_to_ppm
+  PRIVATE
+  rhi-vulkan
+)
+
 set(
   target_list
   "rhi"
   "rhi-vulkan"
   "test-enum_bitset"
+  "test-rhi-render_to_ppm"
 )
 
 foreach(target ${target_list})
@@ -48,5 +64,5 @@ foreach(target ${target_list})
   set_property(TARGET ${target} PROPERTY CXX_STANDARD_REQUIRED ON)
   set_property(TARGET ${target} PROPERTY CXX_EXTENSIONS OFF)
   target_include_directories(${target} SYSTEM PUBLIC ${CMAKE_SOURCE_DIR}/include)
-  target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -O3)
+  target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -O3 -g)
 endforeach()

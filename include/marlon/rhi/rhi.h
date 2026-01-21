@@ -4,180 +4,15 @@
 #include <cstdint>
 
 #include <atomic>
-#include <concepts>
 #include <span>
-#include <utility>
 
-#include <marlon/concepts.h>
 #include <marlon/enum_bitset.h>
+
+#include "enums.h"
+#include "ptr.h"
 
 namespace marlon::rhi
 {
-  struct Object;
-
-  template <std::derived_from<Object> T>
-  struct Ptr;
-
-  template <std::derived_from<Object> T>
-  constexpr auto move_ptr(T *p) noexcept -> Ptr<T>;
-
-  template <std::derived_from<Object> T>
-  auto copy_ptr(T *p) noexcept -> Ptr<T>;
-
-  template <typename T>
-  struct Is_ptr;
-
-  template <typename T>
-  constexpr auto Is_ptr_v = Is_ptr<T>::value;
-
-  template <std::derived_from<Object> T>
-  struct Ptr
-  {
-    using Value_type = T;
-
-    constexpr Ptr() noexcept = default;
-
-    constexpr Ptr(std::nullptr_t) noexcept
-    {
-    }
-
-    ~Ptr()
-    {
-      if (_p)
-      {
-        _p->release();
-      }
-    }
-
-    Ptr(Ptr const &other) noexcept
-        : _p{other._p}
-    {
-      if (_p)
-      {
-        _p->acquire();
-      }
-    }
-
-    Ptr &operator=(Ptr const &other) noexcept
-    {
-      auto temp{other};
-      swap(temp);
-      return *this;
-    }
-
-    constexpr Ptr(Ptr &&other) noexcept
-        : _p{std::exchange(other._p, nullptr)}
-    {
-    }
-
-    constexpr Ptr &operator=(Ptr &&other) noexcept
-    {
-      auto temp{std::move(other)};
-      swap(temp);
-      return *this;
-    }
-
-    constexpr auto operator*() const noexcept -> T &
-    {
-      return *_p;
-    }
-
-    constexpr auto operator->() const noexcept -> T *
-    {
-      return _p;
-    }
-
-    constexpr auto get() const noexcept -> T *
-    {
-      return _p;
-    }
-
-    constexpr auto release() noexcept -> T *
-    {
-      auto temp{_p};
-      _p = nullptr;
-      return temp;
-    }
-
-    template <typename U>
-      requires std::derived_from<T, U>
-    constexpr operator Ptr<U>() && noexcept
-    {
-      return move_ptr(static_cast<U *>(_p));
-    }
-
-    template <typename U>
-      requires std::derived_from<T, U>
-    operator Ptr<U>() const noexcept
-    {
-      return copy_ptr(static_cast<U *>(_p));
-    }
-
-    template <typename U>
-      requires Is_ptr_v<U>
-    constexpr explicit operator U() && noexcept
-    {
-      auto const p = _p;
-      _p = nullptr;
-      return move_ptr(static_cast<U::Value_type *>(p));
-    }
-
-    template <typename U>
-      requires Is_ptr_v<U>
-    explicit operator U() const noexcept
-    {
-      return copy_ptr(static_cast<U::Value_type *>(_p));
-    }
-
-  private:
-    struct Move_tag
-    {
-    };
-
-    struct Copy_tag
-    {
-    };
-
-    friend constexpr auto move_ptr<T>(T *p) noexcept -> Ptr<T>;
-
-    friend auto copy_ptr<T>(T *p) noexcept -> Ptr<T>;
-
-    constexpr explicit Ptr(T *p) noexcept
-        : _p{p}
-    {
-    }
-
-    constexpr auto swap(Ptr &other) noexcept -> void
-    {
-      std::swap(_p, other._p);
-    }
-
-    T *_p{};
-  };
-
-  template <typename T>
-  struct Is_ptr: std::false_type
-  {
-  };
-
-  template <typename T>
-  struct Is_ptr<Ptr<T>>: std::true_type
-  {
-  };
-
-  template <std::derived_from<Object> T>
-  constexpr auto move_ptr(T *p) noexcept -> Ptr<T>
-  {
-    return Ptr<T>{p};
-  }
-
-  template <std::derived_from<Object> T>
-  auto copy_ptr(T *p) noexcept -> Ptr<T>
-  {
-    p->acquire();
-    return Ptr<T>{p};
-  }
-
   struct Deallocator
   {
     virtual ~Deallocator() = default;
@@ -355,152 +190,6 @@ namespace marlon::rhi
       -> Ptr<Command_buffer> = 0;
   };
 
-  enum class Shader_stage_bit
-  {
-    // VERTEX_BIT
-    vertex = 0x00000001,
-    // FRAGMENT_BIT
-    fragment = 0x00000010,
-    // COMPUTE_BIT
-    compute = 0x00000020,
-  };
-
-  using Shader_stage_bitset = Enum_bitset<Shader_stage_bit>;
-
-  constexpr auto operator&(Shader_stage_bit lhs, Shader_stage_bit rhs) noexcept
-  {
-    return Shader_stage_bitset{lhs} & rhs;
-  }
-
-  constexpr auto operator|(Shader_stage_bit lhs, Shader_stage_bit rhs) noexcept
-  {
-    return Shader_stage_bitset{lhs} | rhs;
-  }
-
-  constexpr auto operator^(Shader_stage_bit lhs, Shader_stage_bit rhs) noexcept
-  {
-    return Shader_stage_bitset{lhs} ^ rhs;
-  }
-
-  enum class Pipeline_stage_bit : std::uint64_t
-  {
-    // NONE
-    none = 0ull,
-    // DRAW_INDIRECT_BIT
-    argument_input = 0x00000002ull,
-    // VERTEX_SHADER_BIT
-    vertex_shader = 0x00000008ull,
-    // FRAGMENT_SHADER_BIT
-    fragment_shader = 0x00000080ull,
-    // EARLY_FRAGMENT_TESTS_BIT
-    early_fragment_tests = 0x00000100ull,
-    // LATE_FRAGMENT_TESTS_BIT
-    late_fragment_tests = 0x00000200ull,
-    // COLOR_ATTACHMENT_OUTPUT_BIT
-    color_attachment_output = 0x00000400ull,
-    // COMPUTE_SHADER_BIT
-    compute_shader = 0x00000800ull,
-    // COPY_BIT
-    copy = 0x100000000ull,
-    // RESOLVE_BIT
-    resolve = 0x200000000ull,
-    // BLIT_BIT
-    blit = 0x400000000ull,
-    // INDEX_INPUT_BIT
-    index_input = 0x1000000000ull,
-  };
-
-  using Pipeline_stage_bitset = Enum_bitset<Pipeline_stage_bit>;
-
-  constexpr auto
-  operator&(Pipeline_stage_bit lhs, Pipeline_stage_bit rhs) noexcept
-  {
-    return Pipeline_stage_bitset{lhs} & rhs;
-  }
-
-  constexpr auto
-  operator|(Pipeline_stage_bit lhs, Pipeline_stage_bit rhs) noexcept
-  {
-    return Pipeline_stage_bitset{lhs} | rhs;
-  }
-
-  constexpr auto
-  operator^(Pipeline_stage_bit lhs, Pipeline_stage_bit rhs) noexcept
-  {
-    return Pipeline_stage_bitset{lhs} ^ rhs;
-  }
-
-  enum class Barrier_access_bit : std::uint64_t
-  {
-    // NONE
-    none = 0ull,
-    // INDIRECT_COMMAND_READ_BIT
-    argument_read = 0x00000001ull,
-    // INDEX_READ_BIT
-    index_read = 0x00000002ull,
-    // UNIFORM_READ_BIT
-    uniform_read = 0x00000008ull,
-    // COLOR_ATTACHMENT_READ
-    color_attachment_read = 0x00000080ull,
-    // COLOR_ATTACHMENT_WRITE
-    color_attachment_write = 0x00000100ull,
-    // DEPTH_STENCIL_ATTACHMENT_READ
-    depth_stencil_attachment_read = 0x00000080ull,
-    // DEPTH_STENCIL_ATTACHMENT_WRITE
-    depth_stencil_attachment_write = 0x00000100ull,
-    // TRANSFER_READ
-    transfer_read = 0x00000800ull,
-    // TRANSFER_WRITE
-    transfer_write = 0x00001000ull,
-    // SHADER_SAMPLED_READ
-    shader_sampled_read = 0x100000000ull,
-    // SHADER_STORAGE_READ
-    shader_storage_read = 0x200000000ull,
-    // SHADER_STORAGE_WRITE
-    shader_storage_write = 0x400000000ull,
-  };
-
-  using Barrier_access_bitset = Enum_bitset<Barrier_access_bit>;
-
-  constexpr auto
-  operator&(Barrier_access_bit lhs, Barrier_access_bit rhs) noexcept
-  {
-    return Barrier_access_bitset{lhs} & rhs;
-  }
-
-  constexpr auto
-  operator|(Barrier_access_bit lhs, Barrier_access_bit rhs) noexcept
-  {
-    return Barrier_access_bitset{lhs} | rhs;
-  }
-
-  constexpr auto
-  operator^(Barrier_access_bit lhs, Barrier_access_bit rhs) noexcept
-  {
-    return Barrier_access_bitset{lhs} ^ rhs;
-  }
-
-  enum class Descriptor_type
-  {
-    // SAMPLER
-    sampler = 0,
-
-    // COMBINED_IMAGE_SAMPLER
-    combined_image_sampler = 1,
-
-    // SAMPLED_IMAGE
-    sampled_image = 2,
-
-    // STORAGE_IMAGE
-    storage_image = 3,
-
-    // UNIFORM_BUFFER
-    uniform_buffer = 6,
-
-    // STORAGE_BUFFER
-    storage_buffer = 7,
-  };
-
   struct Descriptor_set_layout_binding
   {
     /// The index of the binding within the descriptor set.
@@ -548,8 +237,21 @@ namespace marlon::rhi
   {
   };
 
+  struct Extent3
+  {
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t depth;
+  };
+
   struct Image_create_info
   {
+    Image_type type;
+    Image_format format;
+    Extent3 extent;
+    std::uint32_t mip_level_count;
+    std::uint32_t array_layer_count;
+    Image_usage_bitset usage_bits;  
   };
 
   struct Swapchain_create_info

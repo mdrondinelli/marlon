@@ -4,8 +4,11 @@
 #include <cstring>
 
 #include <algorithm>
+#include <iostream>
 #include <mutex>
 #include <vector>
+
+#include <volk.h>
 
 #include <marlon/malloc.h>
 
@@ -182,7 +185,7 @@ namespace marlon::rhi::vulkan
         Interface_create_info const &create_info
       );
 
-      auto get_vk_instance() const noexcept -> VkInstance final;
+      auto get_vk_instance() const noexcept -> Dispatchable_handle final;
 
       auto new_surface(Surface_create_info const &create_info)
         -> rhi::Ptr<rhi::Surface> final;
@@ -288,6 +291,15 @@ namespace marlon::rhi::vulkan
             [&]()
             {
               ensure_volk_initialized();
+              auto const supported_version = []()
+              {
+                auto result = std::uint32_t{};
+                vkEnumerateInstanceVersion(&result);
+                return result;
+              }();
+              std::cout << "Vulkan API version suppported: "
+                        << VK_API_VERSION_MAJOR(supported_version) << "."
+                        << VK_API_VERSION_MINOR(supported_version) << "\n";
               auto const validation_layer = "VK_LAYER_KHRONOS_validation";
               auto const layers = create_info.bits & Interface_create_bit::debug
                                     ? std::span{&validation_layer, 1}
@@ -312,8 +324,7 @@ namespace marlon::rhi::vulkan
                       range,
                       [&](char const *cstring_in_range)
                       {
-                        return std::strcmp(cstring_in_range, cstring_to_find) ==
-                               0;
+                        return !std::strcmp(cstring_in_range, cstring_to_find);
                       }
                     );
                     return it != range.end();
@@ -325,11 +336,20 @@ namespace marlon::rhi::vulkan
                 }
                 return result;
               }();
+              auto const application_info = VkApplicationInfo{
+                .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                .pNext = nullptr,
+                .pApplicationName = nullptr,
+                .applicationVersion = {},
+                .pEngineName = nullptr,
+                .engineVersion = {},
+                .apiVersion = VK_API_VERSION_1_4,
+              };
               auto const create_info = VkInstanceCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = {},
-                .pApplicationInfo = {},
+                .pApplicationInfo = &application_info,
                 .enabledLayerCount = static_cast<std::uint32_t>(layers.size()),
                 .ppEnabledLayerNames = layers.data(),
                 .enabledExtensionCount =
@@ -349,7 +369,7 @@ namespace marlon::rhi::vulkan
     {
     }
 
-    auto Interface_impl::get_vk_instance() const noexcept -> VkInstance
+    auto Interface_impl::get_vk_instance() const noexcept -> Dispatchable_handle
     {
       return vk_instance.get();
     }
@@ -450,7 +470,10 @@ namespace marlon::rhi::vulkan
     ) noexcept
         : rhi::Surface{deallocator, sizeof(*this)},
           parent{std::move(parent)},
-          vk_handle{parent->vk_instance.get(), create_info.vk_handle}
+          vk_handle{
+            parent->vk_instance.get(),
+            std::bit_cast<VkSurfaceKHR>(create_info.vk_handle),
+          }
     {
     }
 

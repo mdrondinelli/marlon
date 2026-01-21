@@ -11,12 +11,14 @@ namespace marlon
   {
     using Value_type = std::make_unsigned_t<std::underlying_type_t<T>>;
 
-    constexpr Enum_bitset(T value)
+    constexpr Enum_bitset() noexcept = default;
+
+    constexpr Enum_bitset(T value) noexcept
         : _value{static_cast<Value_type>(value)}
     {
     }
 
-    constexpr explicit Enum_bitset(Value_type value)
+    constexpr explicit Enum_bitset(Value_type value) noexcept
         : _value{value}
     {
     }
@@ -68,7 +70,7 @@ namespace marlon
     }
 
   private:
-    Value_type _value;
+    Value_type _value{};
   };
 } // namespace marlon
 
